@@ -1,0 +1,1529 @@
+\documentclass[runningheads,a4paper]{llncs}
+
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage[strings]{underscore}
+\usepackage{float}
+
+\title{Comparison of explanations of simple and complex Machine Learning models}
+
+\titlerunning{Comparison of explanations of simple and complex Machine Learning models}
+
+\author{Ruiyu Wang}
+
+\institute{MSc in Advanced Computer Science, \\ School of Computing Science,
+        University of Newcastle, U. K. \\
+        \email{r.wang57@ncl.ac.uk}
+}
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Machine learning models make very accurate predictions, but their credibility is often questioned. Frequently, it is necessary to apply interpretive methods to the model's predictions in order to enhance their trustability. In this paper, two machine learning models (Decision Tree and Gradient Boosting Classifier) will be used to solve two classification problems. Their performances and SHAP(SHapley Additive exPlanations)interpretations will be compared to determine their level of trustworthy. 
+
+In order to validate the generated interpretations, in this paper, synthetic data generation techniques will be used to generate labels for classification problems according to custom rules and to verify that the model understands the custom rules. What is clear is that GBC has a better performance, both in terms of noise handling and plausibility.
+	\keywords{Interpretable Machine Learning \and SHAP \and Synthetic Data Generation.}
+\end{abstract}
+
+\section{Introduction}
+
+With the success of machine learning (ML) in more and more areas in recent years, the need for explainability of ML has grown.
+
+ML is now widely used in many domains, such as alphaGO and ChatGPT.
+However, ML models often fail to explain their predictions. For example,  in alphaGO, the model will only give a method to win the game, but it will not explain why this method wins.
+In some specific domains, the loss of explanation is often accompanied by a loss of trust.
+There is also a loss of trust. 
+For example, in medicine, if the model just gives a diagnosis without any explanation, it often fails to gain trust. This is because the cost of models that make incorrect predictions is often prohibitive.
+
+Model interpretation in ML is the process of interpreting the behaviour and results of ML models~\cite{doshivelez2017rigorous}.
+A good explanation intuitively gives the reason why the model makes the predictions it does.
+This process can make the black box prediction process transparent.\cite{8466590}
+The trustability and transparency of the model is ensured through the interpretation of the model~\cite{arrieta2020explainable}~\cite{Molnar2020}, which strengthens the user's trust in the model's prediction results.
+At the same time, the interpretation of the model can often be used to improve the model or to gain some knowledge through the model~\cite{8466590}.
+
+The complexity of generating explanations is directly proportional to the complexity of the ML algorithm that generates the model.
+Explaining the simplest linear regression can be done with simple arithmetic. Explaining complex deep neural networks is frequently, nevertheless, difficult to begin with.
+As a result, many model-agnostic interpretation methods have been proposed and widely used.
+SHAP (SHapley Additive exPlanations)~\cite{lundberg2017unified} is one of the most representative methods.
+
+At the same time, noise in datasets is one of the problems often faced in the field of ML.
+Datasets in nature are often not perfect, and noise can come from many sources, including incorrect collection by humans or instruments.
+Data with noise often negatively affects the prediction results of machine learning models ~\cite{GUPTA2019466}~\cite{saseendran2019impact}.
+
+The aim of this paper is to generate and compare interpretations of simple or complex ML models on synthetic datasets containing different levels of noise.
+
+Section~\ref{section background} gives a brief history of the development of machine learning interpretation techniques. 
+Section 3 describes the experimental setup and datasets generation method. 
+Section 4 will describe the experimental procedure and some of the methods used in the experiments, such as HalvingGridSearchCV and nested cross-validation.
+Section 5 describe and analyse the results. 
+Section 6 summarises the results of the experiments and gives conclusions about the comparison experiments.
+Finally, Section 7 examines the limitations of the experiment and provides suggestions for further research.
+
+\section{Background of Interpretation}\label{section background}
+
+Interpretation methods for ML models can usually be divided into two types: model-specific or model-agnostic interpretation methods~\cite{doshivelez2017rigorous}.
+
+\subsection{Model-specific Interpretation}
+
+For simple models (e.g. linear regression, logistic regression, decision trees, etc.), assumptions about the distribution  are often made in advance~\cite{doshivelez2017rigorous}.
+These assumptions lead to a simpler structure of the models, making them easier to interpret.
+For example, Before using linear regression, the user needs to first assume that the predictions are linear.
+Linear regression generates predictions by linearly combining the features.
+Gauss has been using linear regression since the nineteenth century~\cite{gauss1877theoria},this is precisely because the principle of linear regression is very simple: find a line in space such that the sum of the distances from each data point to the line is the shortest.
+
+However, model-specific interpretation methods tend to apply only to simple models. The internals of highly complex models are not analysed and interpreted.
+
+\subsection{Model-agnostic Interpretation}
+Many model agnostic approaches have been proposed in recent years. 
+These methods involve interpreting the model after training.
+Among them, the most representative are LIME and SHAP.
+SHAP is used in this paper because it is an improvement of LIME with better functionality~\cite{alvarezmelis2018robustness}.
+\subsubsection{LIME}
+In 2016, LIME was proposed by Ribeiro et al~\cite{ribeiro2016should}.
+LIME is interpreted by inputting individual data points into the model to capture individual predictions. Perturbation data is then input to capture changes in the predictions to generate an interpretation of the model.
+\subsubsection{SHAP}
+Lundberg and Lee presented SHAP in 2017~\cite{lundberg2017unified}.
+SHAP is based on the Shapley value in game theory~\cite{Shapley1953}, a method of allocating profits according to contributions.
+SHAP can decompose a prediction into the contributions made to the prediction by each feature of the input data.
+While highlighting the contribution of individual features, SHAP also indicates the impact of interactions between features on the prediction~\cite{lundberg2017unified}.
+In other words, the biggest difference between SHAP and LIME is that SHAP introduces the Shapley value to calculate the contribution made by features to the prediction~\cite{lundberg2017unified}.
+
+Another key difference between LIME and SHAP is that SHAP can provide global interpretations of the entire dataset~\cite{lundberg2017unified}, while LIME tends to provide localized interpretations of an instance of data~\cite{ribeiro2016should}. Furthermore, SHAP offers comprehensive visualization tools to display the interpretations as a graph.
+
+From 2017 to the present, SHAP has undergone many updates, including the launch of TreeSHAP in 2019~\cite{lundberg2019consistent}.
+This is the SHAP variant for tree-based machine learning models such as decision trees, random forests and gradient boosting trees. 
+Compared to the original KernelSHAP, TreeSHAP is faster, but somewhat more model-specific.
+
+\section{Experiment Preparation}
+
+\subsection{Experimental Design}
+This experiment can be divided into three parts: generating synthetic datasets (with different levels of noise), training the model using machine learning algorithms, and generating model interpretations using SHAP.
+
+To confirm the trustability of the generated interpretations, it is necessary to generate synthetic datasets. This is because the original dataset lacks knowledge of the relationship between labels and attributes. It is not possible to ascertain whether the explanation finds a solution to the problem or not by using the attributes and labels from the original dataset directly. This project will generate new labels from the attributes based on custom rules, and then use the attribute data with the new labels as a training set.
+Through this process, it is possible to analyse whether the model has found a customised rule or whether it has used other rules for prediction.
+
+Noise can be divided into class noise and attribute noise~\cite{Zhu2004}. 
+Class noise is the misclassification or absence of labels.
+Attribute noise, on the other hand, are outliers of input attributes.
+As the SHAP method calculates the contribution of each attribute to the prediction.
+In this project, attribute noise will be added to the dataset during the synthetic data generation stage.
+To add noise to the dataset, a rule is first artificially created to predict labels based on the attribute data. The special attributes are associated with the rule while the normal attributes are not. Two methods can be used to add noise when creating a synthetic dataset: (1) Adding the same level of noise to each attributes (2) Add different noise level to special attributes and the other.
+
+Overall, custom rules for label generation enable defining a training objective for a machine learning model, which is to discover custom rules. If the interpretation shows that the model identified the rule, it denotes that the model might be reliable. However, if the interpretation indicates that the model failed to identify the rule, it suggests that its prediction process might not be reliable.
+Introducing noise enables assessing whether the model can still identify rules for obtaining labels from attributes despite subtle changes, hence providing a comparison.
+
+\subsection{Datasets Selection}
+Several machine learning benchmark datasets will be used as the original datasets in the experiments. 
+The synthetic dataset necessary for training is generated from original datasets by defining rules to create new labels and adding noise.
+
+The mushroom classification dataset~\cite{misc_mushroom_73} from the UC Irvine(UCI) Machine Learning Repository and the Stellar classification dataset~\cite{Fedesoriano_2022} from the Kaggle competition were selected.
+\subsubsection{Mushroom Classification Dataset}
+The dataset contains 8124 samples and 22 variables (odor, shape, color, etc. of different parts of the mushroom)\cite{misc_mushroom_73}.
+Predict whether a mushroom is poisonous or not based on various attributes.
+It is important to note that the attribute values in this dataset are all categorical attributes. 
+This means that these attributes have a fixed range of values and noise is added according to the range of values of the attributes.
+
+\subsubsection{Stellar Classification Dataset}
+The dataset consists of data from space observations made by the Sloan Digital Sky Survey (SDSS)~\cite{Abdurro’uf_2022}. The dataset includes information about the instruments involved in the observations and spectral information about the stars observed. The dataset classifies stars into three categories, galaxies, quasars, and stars, and contains 17 classification attributes and a column of classification labels.
+\subsection{Noise Addition Method}
+\subsubsection{Mushroom Classification Dataset}
+
+Since the attributes in the mushroom categorical dataset are all categorical attributes, noise must be generated according to the range of values of each attribute in order not to change the nature of the dataset.
+Adding noise to the mushroom dataset uses the method of generating random noise based on the range of values of the attributes and replacing the values in the original dataset.
+In this article, when noise is added to a dataset, it is added based on attributes.
+The method for adding noise to one attribute in mushroom dataset is as follows:
+
+First, the column to which the noise is to be added is identified by passing external parameters.
+
+Then, the global distribution of distinct values is extracted from that column of the original dataset.
+
+Then, based on the global distribution and the noise ratio to be added, the number of distinct noise values to be generated is calculated.
+
+Finally, based on the number of noise values, the number of indexes corresponding to each value is extracted from the original dataset and the data pointed to by the indexes is changed to other values.
+
+Fig~\ref{Comparison before and after adding noise} shows the change in the number of different values of the odor attribute in the mushroom classification dataset before and after the addition of 5 percents noise.
+Sub-fig.~\ref{comparisonA} demonstrates the number of different odors before adding noise, while sub-fig.~\ref{comparisonB} displays the number of odors after adding five percent of noise.
+\begin{figure}[H]
+    \centering
+
+    \subfigure[Original dataset]{
+        \includegraphics[width=0.45\textwidth]{fig2.png}
+        \label{comparisonA}
+    }
+    \hfill
+    \subfigure[After noise addition]{
+        \includegraphics[width=0.45\textwidth]{fig1.png}
+        \label{comparisonB}
+    }
+
+
+    \caption{Comparison before and after adding noise}
+    \label{Comparison before and after adding noise}
+\end{figure}
+
+The proportion of each odor before and after adding noise remained almost unchanged, as shown in Fig.~\ref{Comparison before and after adding noise}, although there were some minor changes in the number of each odor.
+
+\subsubsection{Stellar Classification Dataset}
+In a stellar categorical dataset, all data is numeric, which means that all attributes in the dataset are continuous attributes. Adding noise to continuous attributes is much simpler than adding noise to categorical attributes, where noise can be generated based on various mathematical distributions and added directly to the dataset.
+Common types of noise include Gaussian noise, Perlin noise, and others.
+\paragraph{Gasussian Noise}
+Gaussian noise is a frequently-occurring form of random signal noise, which is also referred to as normally distributed noise, or white noise~\cite{jain1989fundamentals}. This type of noise is the result of adding multiple independent random variables together, which follow a Gaussian distribution. This distribution is also known as a normal distribution. Gaussian noise is ubiquitous in numerous natural and engineering systems, such as electronic devices, communication systems, image processing, and measurement equipment.
+
+Gaussian distribution has the following characteristics:
+
+Mean: Gaussian noise has a mean of 0, which means it has an expected value of 0.
+
+Variance: the variance determines how much the Gaussian noise spreads around the mean. 
+A smaller variance will concentrate the noise near the mean, while a larger variance will result in a wider range of noise.
+
+Symmetry: the Gaussian distribution is symmetrical, with a peak at the mean and a gradual decay to the sides.
+
+The mathematical expression for Gaussian noise is
+
+\begin{equation}
+f(X) = \frac{1}{\sqrt{2\pi\sigma^2}}\cdot e^-\frac{(x-\mu)^2}{2\sigma^2}
+\end{equation}
+where f(x) is the probability density function, $\mu$ is the mean, and $\sigma$ is the standard deviation.
+One can vary the standard deviation of the Gaussian distribution in practice to achieve various levels of Gaussian noise.
+
+Because Gaussian noise follows a Gaussian distribution, most noise values are clustered near the mean, and noise values far from the mean are less likely to occur. This makes Gaussian noise very useful statistically
+
+\paragraph{Perlin Noise}
+Perlin noise is an algorithm created by Ken Perlin in 1985 to generate continuous, smooth, pseudo-random noise\cite{perlin1985image}. It is commonly used in computer graphics, animation, and game development to create natural, realistic-feeling textures, terrain, clouds, water waves, and other effects\cite{green2005implementing}.
+
+Perlin noise is known for its ability to generate continuous noise values with smooth transitions in space, without the presence of noticeable edges or abrupt changes. This property makes it exceptionally useful in simulating natural environments and generating textures~\cite{perlin1985image}.
+
+Perlin noise generation is achieved through interpolation. This method combines multiple random gradient vectors with the input point positions to obtain a continuous noise value~\cite{green2005implementing}. 
+
+The Perlin noise algorithm can be broken down into the following steps:
+
+Create a grid for the input points and determine the stochastic gradient vector for each grid point.
+Map the input points to the grid and calculate the offset from each input point to the nearest grid point.
+At each grid point, the noise value is calculated by using the offset and the stochastic gradient vector.
+The noise values at various grid points are interpolated to produce the final Perlin noise value~\cite{green2005implementing}.
+
+There are five parameters in the Python noise library that can be used to control the different Perlin noises generated:
+
+Scale: The scale is a factor used to control the coarseness of the noise texture. Lower values will generate finer textures, and higher values will produce coarser ones.
+
+Octaves: Octaves refer to the number of frequencies used to superimpose the noise textures. Adding more octaves increases detail and complexity, but could also raise the computational demand.
+
+Persistence: Persistence controls how much each frequency contributes to the noise texture. The values range from 0 to 1, where higher values indicate a stronger effect of high-frequency noise on the final outcome.
+
+Lacunarity: The separation parameter, is used to regulate the distance between successive frequencies. It impacts the extent of each frequency.
+
+Seed: The seed value determines the beginning of the noise generation process. Using the same seed value will result in the same noise pattern, facilitating production of a specific noise texture.
+
+
+\section{Experiment}
+
+This paper selected both decision tree and Gradient Boosting tree Classifier(GBC) in the experiments. HalvingGridSearchCV (HSGCV)~\cite{pmlr-v51-jamieson16} was used to parameterize the model, and the process of HSGCV was evaluated using nested cross-validation~\cite{https://doi.org/10.1111/j.2517-6161.1974.tb00994.x} in the experiments.
+
+\subsection{Preprocessing}
+In the pre-processing of the data before training, the following treatments were applied:
+
+Extract the 'class' attribute from both datasets as the label set.
+
+The attribute named 'veil-type' has been removed from the mushroom  classification dataset because it contains only one value and was considered to have no impact on the prediction.
+
+The attributes in the dataset for stellar classification are restricted to redshift and the five filters available in the photometric system. This is due to their insignificance in generating classification predictions, as these attributes comprise of various IDs, times, etc.
+
+The stellar dataset is a triple classification problem with three labels: 'star', 'galaxy', and 'quasar'. 
+The dataset is transformed into a binary classification problem by combining the 'galaxy' and 'quasar'. 
+There were two reasons for this transformation: to address some degree of class imbalance and to allow TreeSHAP to generate interpretable explanations for the GradientBoostingClassifier(GBC) because TreeSHAP can not generate explaination while GBC is  handling a muti-class classification problem.
+After combing, dataset has two class: 'star' and 'other'.
+\subsection{Custom Rules}
+\subsubsection{Mushroom dataset} 
+
+the custom rules are:
+
+If the Mushroom 'odor' attribute is not none and the 'population' attribute is not 'SEVERAL' or 'SOLITARY', the mushroom is 'poisonous'.
+
+If the mushroom has a brightly 'cap-color' and 'gill-color', the mushroom is 'poisonous'.
+
+The mushroom is 'poisonous' if its 'habitat property' is 'WASTE'.
+
+In all other cases the mushroom is 'edible'.
+
+The above attribute columns are special columns in the Mushroom Classification dataset.
+This leaves about 51\% of mushrooms classified as 'poisonous'.
+\subsubsection{Stellar dataset}
+The rule relate to formula in astrophysics~\cite{ryden2020foundations}. However, due to the intricacy of the accurate calculations, the rules only create an approximation:
+
+
+Calculate the mean of data on five filters.
+
+While  0\textless'Redshift'\textless1, use 'Redshift' times the speed of light divided by the Hubble constant to get the distance.
+
+Calculate of absolute magnitudes using formula:
+\begin{equation}
+M = m + 5 - lg(d)
+\end{equation}
+Where M means absolute magnitudes, m means mean, d means distance.
+
+If M $\in$ (-10,17), the stellar is classified as 'star'
+
+In other case, stellar is classified as 'other'
+Since the five filter data work together, here, only the 'redshift' is set as a special column.
+
+After applying this rule on dataset, about 40\% instances were classified as 'star'.
+\subsection{HalvingGridSearchCV}
+Optimizing hyperparameters (fine-tuning) is a crucial component of machine learning that enables finding the hyperparameters leading to optimal model training outcomes.
+
+However, manually adjusting the parameters can be tedious.
+Two automatic hyperparameter tuning methods are widely used in the model generation process, namely GridSearchCV and RandomizedSearchCV. GridSearchCV requires a hyperparameter grid, provided by humans. Then, the algorithm exhaustively combines the parameters in the grid to find the combination that provides the best training results.
+In contrast, RandomizedSearchCV requires artificially defining a range of values for the parameters and finding the hyperparameter combination that produces optimal training results within the specified parameter range.
+
+HSGCV can be seen as an enhanced version of GridSearchCV. Employing GridSearchCV can be a very time-consuming task. HSGCV speeds up the hyperparameter optimisation process through a technique called successive halving~\cite{pmlr-v51-jamieson16}.
+Successive halving refers to the use of multiple iterations in the hyperparameter search process. Each iteration involves selecting a subset of the parameters for training, and then eliminating less effective parameters to gradually converge towards the optimal ones.
+
+The advanced performance and ability of HSGCV to significantly reduce the time required for hyperparameter optimization made it suitable as an experimental function in Scikit-learn\cite{pedregosa2011scikit}, a very popular machine learning library in Python.
+
+\subsection{Nested Cross-validation}
+Hyperparameter optimization often requires cross-validation(CV). K-fold cross-validation is a common technique used in CV, where the dataset is partitioned into K segments. During each iteration, one segment is used as validation data, while the remaining segments are used as training data. After each iteration, the average training results are computed, which provides an estimate of the model's generalization ability.
+
+Nested cross-validation~\cite{https://doi.org/10.1111/j.2517-6161.1974.tb00994.x} is a technique that involves two layers of cross-validation, where the selection of hyperparameters occurs within the inner layer of cross-validation, which is then followed by evaluating the performance in the outer layer of cross-validation.
+
+A thorough evaluation of the hyperparameter search process was conducted through nested cross-validation. We ensured that the hyperparameter search process identifies the best combination of hyperparameters to obtain the optimal model.
+
+\subsection{Experiment details}
+
+\subsubsection{Fold of CV}
+Due to the relatively small size of the mushroom classification dataset (8124 instances), a higher number of folds was used for cross-validation: fold equals 10  for both the inner CV and outer CV. In contrast, the stellar classification dataset contains a large number of samples (100,000 instances), fewer cross-validation folds were used: To expedite the training process,a 5-fold for both the inner CV and outer CV.
+
+\subsubsection{Noise level setting}
+For mushroom dataset, 4 noise levels are set.
+For each of the three experiments, the noise levels was set to five of 0 \%, 5\%, 10\%, and 20\%.
+
+For Stellar dataset, 4 noise levels are set to Perlin noise, which are no noise, simple noise, medium noise, and complex noise. Also, 3 noise levels are set to Perlin noise, which are standard derivation $\in$ [0.1,0.2,0.5].
+
+\section{Experiment Result}
+After training, the scores generated by nested cross-validation are available with SHAP-generated interpretations. Nested cross-validation in this paper uses the F1\_macro score as an evaluation metric, presented in a table with data formatted as mean +/- standard deviation. SHAP's bar plot interpretation, beeswarm plot interpretation and heatmap plot are used in this paper.
+
+The Bar plot shows the feature importance analysis derived from the SHAP interpretation.The Beeswarm plot shows the effect of attribute value on the prediction results ranked according to the feature importance.The Heatmap plot clusters the interpretations of each sample according to the similarity, which is used to show the global interpretation of the model on the whole dataset.
+
+Since it takes a very long time to generate the heat map interpretation for the whole dataset, in this paper, the heat map interpretation is generated by randomly sampling the complete dataset (random sampling is done by disrupting the dataset and taking the first N) to generate the heat map interpretation for N samples.
+\subsection{Mushroom dataset}
+
+\subsubsection{Same noise level for all attributes}
+
+The decision tree and GBC were trained separately on the mushroom classification dataset, which contained different levels. As a result, the following outcomes were obtained:
+
+Table~\ref{result from same mushroom} shows the performance of the two models on the mushroom classification datasets with different noise level(same level on each attribute)
+
+\begin{table}[H]
+\centering
+\caption{F1-score from CV for same noise level on mushroom dataset}
+\label{result from same mushroom}
+\begin{tabular}{|l|l|l|}
+\hline
+Noise level & Result from DT  &Result from GBC\\
+\hline
+0\% & 1.000 +/- 0.000 & 1.000 +/- 0.001 \\
+5\% & 0.985 +/- 0.004 & 0.992 +/- 0.004 \\
+10\%& 0.969 +/- 0.010 & 0.989 +/- 0.004 \\
+20\%& 0.962 +/- 0.007 & 0.977 +/- 0.007 \\
+\hline
+\end{tabular}
+\end{table}
+
+As can be seen in Table~\ref{result from same mushroom}, as the noise level rises, the F1-score of both models produces minor reductions. Among them, the decision tree received a greater impact compared to the GBC.
+
+\paragraph{Noise level 0\%}
+Both models achieved a 100\% F1-score on the noise-free dataset as shown in Table ~\ref{result from same mushroom}. The confirmation of whether the two models identified the defined rules can only be made through further analysis of SHAP's interpretation.
+
+Fig. ~\ref{bar plots noise level 0} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig3.png}
+		\label{bar_same_DT_0}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig4.png}
+		\label{bar_same_GBC_0}
+	}
+	
+	
+	\caption{SHAP bar plot for same noise level 0\% on mushroom dataset}
+	\label{bar plots noise level 0}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots noise level 0} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig5.png}
+		\label{bee_same_DT_0}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig6.png}
+		\label{bee_same_GBC_0}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for same noise level 0\% on mushroom dataset}
+	\label{bee plots noise level 0}
+
+\end{figure}
+Fig. ~\ref{heat plots noise level 0} shows the heatmap plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig7.png}
+		\label{heat_same_DT_0}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig8.png}
+		\label{heat_same_GBC_0}
+	}
+	
+	
+	\caption{SHAP heatmap plot for same noise level 0\% on mushroom dataset}
+	\label{heat plots noise level 0}
+	
+\end{figure}
+As can be seen in Fig.~\ref{bar plots noise level 0}, the importance of the features produced by the decision tree model is very different from the importance of the features produced by the GBC.
+Odor was not considered an important attribute in the decision tree, which may have resulted in the model failing to learn the custom rules. On the other hand, the GBC has assigned importance to the two irrelevant attributes and has included them in all the rules. It is possible that the two irrelevant attributes were introduced due to the correlation between the attributes.
+
+As shown in Fig.~\ref{bee plots noise level 0}, it is difficult to specify attributes based on high or low attribute values due to the categorical nature of the attributes. However, the beeswarm plot produced by GBC indicates a certain adherence to the rule where the presence of a specific 'odor' value has a negative effect on the classification as poisonous, while a specific 'habitat' value has a positive effect on the classification as poisonous. This is comparatively more difficult to observe while analyzing the beeswarm plot produced by decision trees.
+
+Similarly, in Fig.~\ref{heat plots noise level 0}, when the two rule-independent attributes are removed, the GBC produces a heatmap plot that fits the rule very well: there are three scenarios when categorised as poisonous (1) 'odor' and 'population' act together. (2) 'cap-color' and 'gill-color' act together. (3) The 'habitat' effect. This cannot be observed on the heatmap plot generated by the decision tree model.
+
+Overall, although the two models get the same F1-score(100\%), the GBC generates explanations that fit the rule better, so the GBC model's predictions should be more trustworthy.
+\paragraph{Noise level 5\%}
+Table~\ref{result from same mushroom} shows a very slight decrease in the F1 score for both models after adding 5\% noise to the dataset.
+Fig.~\ref{bar plots noise level 5} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig9.png}
+		\label{bar_same_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig10.png}
+		\label{bar_same_GBC_5}
+	}
+	
+	
+	\caption{SHAP bar plot for same noise level 5\% on mushroom dataset}
+	\label{bar plots noise level 5}
+\end{figure}
+
+Fig.~\ref{bee plots noise level 5} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig11.png}
+		\label{bee_same_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig12.png}
+		\label{bee_same_GBC_5}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for same noise level 5\% on mushroom dataset}
+	\label{bee plots noise level 5}
+	
+\end{figure}
+Fig. ~\ref{heat plots noise level 5} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig13.png}
+		\label{heat_same_DT_5}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig14.png}
+		\label{heat_same_GBC_5}
+	}
+	
+	
+	\caption{SHAP heatmap plot for same noise level 5\% on mushroom dataset}
+	\label{heat plots noise level 5}
+	
+\end{figure}
+
+As can be seen in Fig.~\ref{bar plots noise level 5}, after adding 5\% noise, both models use more features in their prediction strategies. Both models identified strategy-related attributes as important.
+
+However, in Fig.~\ref{bee plots noise level 5}, the interpretation becomes complicated with the addition of noise compared to the interpretation in the absence of noise.
+
+In Fig.~\ref{heat plots noise level 5}, it can be seen that although the interpretation becomes complex, it still roughly conforms to the  custom rules.
+
+Overall, both models' interpretations fit the custom rule well when there is 5\% noise, but GBC has a higher F1-score.
+\paragraph{Noise level 10\%}
+As can be seen in Table  ~\ref{result from same mushroom}, the F1-score of both models further decreased when the proportion of noise in the dataset increased to 10\%.
+
+Fig.~\ref{bar plots noise level 10} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig15.png}
+		\label{bar_same_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig16.png}
+		\label{bar_same_GBC_10}
+	}
+	
+	
+	\caption{SHAP bar plot for same noise level 10\% on mushroom dataset}
+	\label{bar plots noise level 10}
+\end{figure}
+Fig.~\ref{bee plots noise level 10} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig17.png}
+		\label{bee_same_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig18.png}
+		\label{bee_same_GBC_10}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for same noise level 10\% on mushroom dataset}
+	\label{bee plots noise level 10}
+	
+\end{figure}
+Fig.~\ref{heat plots noise level 10} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig19.png}
+		\label{heat_same_DT_10}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig20.png}
+		\label{heat_same_GBC_10}
+	}
+	
+	
+	\caption{SHAP heatmap plot for same noise level 10\% on mushroom dataset}
+	\label{heat plots noise level 10}
+	
+\end{figure}
+In Fig.~\ref{bar plots noise level 10}, it is shown that as the noise increases to 10\%, both models consistently consider several attributes associated with the rule to be the more important ones. In addition, both models consider 'ring-type' as a more important attribute. This should be due to the fact that 'ring-type' is highly correlated with rule-related attributes in the original dataset.
+
+In Fig.~\ref{bee plots noise level 10}, it is shown that as the noise increases from 5\% to 10\%, the areas of regular correlation on the beeswarm map become much more complex, with very cluttered colors.
+
+In Fig.~\ref{heat plots noise level 10}, it can be seen that an increase in the noise level complicates the interpretation of the model. Although both models still fit the rule roughly.
+
+Overall, both models still roughly fit the rules, but the decision tree has more misclassification than the GBC.
+\paragraph{Noise level 20\%}
+As can be seen in Table ~\ref{result from same mushroom}, when the noise rises to 20\%, both models show a more significant decrease in F1-score.
+
+Fig.~\ref{bar plots noise level 20} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig21.png}
+		\label{bar_same_DT_20}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig22.png}
+		\label{bar_same_GBC_20}
+	}
+	
+	
+	\caption{SHAP bar plot for same noise level 20\% on mushroom dataset}
+	\label{bar plots noise level 20}
+\end{figure}
+Fig.~\ref{bee plots noise level 20} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig23.png}
+		\label{bee_same_DT_20}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig24.png}
+		\label{bee_same_GBC_20}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for same noise level 20\% on mushroom dataset}
+	\label{bee plots noise level 20}
+	
+\end{figure}
+Fig.~\ref{heat plots noise level 20} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig25.png}
+		\label{heat_same_DT_20}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig26.png}
+		\label{heat_same_GBC_20}
+	}
+	
+	
+	\caption{SHAP heatmap plot for same noise level 20\% on mushroom dataset}
+	\label{heat plots noise level 20}
+	
+\end{figure}
+As shown in Fig~\ref{bar plots noise level 20}, when the noise rises to 20\%, both models no longer use 'habitat' as an important attribute, instead introducing some attributes outside the rules.
+
+At the same time, as shown in Fig.~\ref{bee plots noise level 20}, the beeswarm plots become very complex.
+
+Fig.~\ref{heat plots noise level 20} shows that there is a big difference between prediction strategies and custom rules.
+This is evidenced by the fact that many rule-related attributes(e.g. 'habitat','cap-color') can no longer have an impact on predictions.
+
+All in all, while noise level equals 20\%, neither model can be trusted well.
+
+\subsubsection{Special attributes have different noise level}
+The decision tree and GBC were trained separately on the mushroom classification dataset, which the noise level on special attributes is 5\% higher or less than noise level on the other attributes. As a result, the following outcomes were obtained:
+
+Table~\ref{result from spcial different mushroom} shows the performance of the two models on the mushroom classification datasets with different noise level(special attributes have higher noise level)
+
+\begin{table}[H]
+	\centering
+	\caption{Mean F1-score from CV for same noise level on mushroom dataset}
+	\label{result from spcial different mushroom}
+	\begin{tabular}{|l|l|l|l|}
+		\hline
+		Normal Column Noise level&Special Column Noise level & Result from DT  &Result from GBC\\
+		\hline
+		0\%& 5\%& 0.990 +/- 0.003 & 0.992 +/- 0.002 \\
+		5\%& 10\%& 0.969 +/- 0.006 & 0.978 +/- 0.004 \\
+		\hline
+		5\%& 0\%& 0.997 +/- 0.003 & 1.000 +/- 0.000 \\
+		10\%& 5\%& 0.978 +/- 0.006 & 0.988 +/- 0.004 \\
+		\hline
+	\end{tabular}
+\end{table}
+
+As can be seen in Table~\ref{result from spcial different mushroom}, as the noise level rises, the F1-score of both models produces a certain decrease. Among them, the decision tree received a greater impact compared to the GBC. 
+\paragraph{Special columns 5\% others 0\%}
+Fig.~\ref{bar plots special_higher 5} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig27.png}
+		\label{bar_high_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig28.png}
+		\label{bar_high_GBC_5}
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have 5\% noise and others have 0\% }
+	\label{bar plots special_higher 5}
+\end{figure}
+Fig.~\ref{bee plots special_higher 5} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig29.png}
+		\label{bee_high_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig30.png}
+		\label{bee_high_GBC_5}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have 5\% noise and others have 0\% }
+	\label{bee plots special_higher 5}
+	
+\end{figure}
+Fig.~\ref{heat plots special_higher 5} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig31.png}
+		\label{heat_high_DT_5}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig32.png}
+		\label{heat_high_GBC_5}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have 5\% noise and others have 0\% }
+	\label{heat plots special_higher 5}
+	
+\end{figure}
+
+From Fig.~\ref{bar plots special_higher 5}, Fig.~\ref{bee plots special_higher 5} and Fig.~\ref{heat plots special_higher 5}, it can be seen that the rule-related attributes in the interpretation of the decision tree do not have a significant impact on the prediction, which suggests that the decision tree does not fit the custom rule well. In contrast, in the GBC interpretation, although it is affected by noise and the interpretation becomes complicated, it still reflects the fitting of the rules. Most rule-related attributes have a relatively large impact on the prediction.
+At this point, only the GBC's predictions can be trusted.
+\paragraph{Special columns 10\% others 5\%}
+Fig.~\ref{bar plots special_higher 10} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig33.png}
+		\label{bar_high_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig34.png}
+		\label{bar_high_GBC_10}
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have 10\% noise and others have 5\% }
+	\label{bar plots special_higher 10}
+\end{figure}
+Fig.~\ref{bee plots special_higher 10} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig35.png}
+		\label{bee_high_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig36.png}
+		\label{bee_high_GBC_10}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have 10\% noise and others have 5\% }
+	\label{bee plots special_higher 10}
+	
+\end{figure}
+Fig.~\ref{heat plots special_higher 10} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig37.png}
+		\label{heat_high_DT_10}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig38.png}
+		\label{heat_high_GBC_10}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have 10\% noise and others have 5\%}
+	\label{heat plots special_higher 10}
+	
+\end{figure}
+From Fig.~\ref{bar plots special_higher 10}, Fig.~\ref{bee plots special_higher 10},Fig.~\ref{heat plots special_higher 10} , it is clear that both models roughly fit the custom rules, and the rule-related attributes are well utilised by the models. However, GBC has a higher F1-score.
+
+\paragraph{Special columns 0\% others 5\%}
+Fig.~\ref{bar plots special_lower 5} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig51.png}
+		\label{bar_low_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig52.png}
+		\label{bar_low_GBC_5}
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have 0\% noise and others have 5\% }
+	\label{bar plots special_lower 5}
+\end{figure}
+Fig.~\ref{bee plots special_lower 5} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig53.png}
+		\label{bee_low_DT_5}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig54.png}
+		\label{bee_low_GBC_5}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have 0\% noise and others have 5\% }
+	\label{bee plots special_lower 5}
+	
+\end{figure}
+Fig.~\ref{heat plots special_lower 5} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig55.png}
+		\label{heat_low_DT_5}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig56.png}
+		\label{heat_low_GBC_5}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have 0\% noise and others have 5\% }
+	\label{heat plots special_lower 5}
+	
+\end{figure}
+
+As can be seen in Fig.~\ref{bar plots special_lower 5},Fig.~\ref{bee plots special_lower 5},Fig.~\ref{heat plots special_lower 5}, at this point, both models fit the custom rules well, due to the fact that the influence of the other attributes is reduced by the noise. At this point, the predictions of both models are trustworthy.
+
+\paragraph{Special columns 5\% others 10\%}
+Fig.~\ref{bar plots special_lower 10} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig57.png}
+		\label{bar_low_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig58.png}
+		\label{bar_low_GBC_10}
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have 5\% noise and others have 10\% }
+	\label{bar plots special_lower 10}
+\end{figure}
+Fig.~\ref{bee plots special_lower 10} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig59.png}
+		\label{bee_low_DT_10}
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig60.png}
+		\label{bee_low_GBC_10}
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have 10\% noise and others have 5\% }
+	\label{bee plots special_lower 10}
+	
+\end{figure}
+Fig.~\ref{heat plots special_lower 10} shows the heatmap plots generated by SHAP from these two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig61.png}
+		\label{heat_low_DT_10}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig62.png}
+		\label{heat_low_GBC_10}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have 5\% noise and others have 10\%}
+	\label{heat plots special_lower 10}
+	
+\end{figure}
+
+From Fig.~\ref{bar plots special_lower 10}, Fig.~\ref{bee plots special_lower 10},Fig.~\ref{heat plots special_lower 10} , it can be seen that with the addition of noise, the prediction strategies of both models are somewhat disturbed by the noise. Due to the low noise level, the prediction strategies of both models remain close to fitting the customized rules. GBC is more trustworthy because GBC has higher F1-score.
+
+\subsection{Stellar dataset}
+
+\subsubsection{Same Perlin noise for all attributes}
+
+The decision tree and GBC were trained separately on the stellar classification dataset, which contained different levels. As a result, the following outcomes were obtained:
+
+Table~\ref{result from same stellar perlin} shows the performance of the two models on the stellar classification datasets with different noise level(same level on each attribute)
+
+\begin{table}[H]
+	\centering
+	\caption{F1-score from CV for same Perlin noise level on stellar dataset}
+	\label{result from same stellar perlin}
+	\begin{tabular}{|l|l|l|}
+		\hline
+		Noise level & Result from DT  &Result from GBC\\
+		\hline
+		No noise& 1.000 +/- 0.000& 1.000 +/- 0.000 \\
+		Smooth & 0.920 +/- 0.003 & 0.929 +/- 0.002 \\
+		Medium & 0.888 +/- 0.003 & 0.992 +/- 0.004 \\
+		Rough & 0.857 +/- 0.004 & 0.911 +/- 0.003 \\
+		\hline
+	\end{tabular}
+\end{table}
+Where noise level 'Smooth' means less variation and smaller range  of noise, 'rough' means more variation and bigger range of noise.
+As can be seen in Table~\ref{result from same stellar perlin}, as the noise level rises, the F1-score of both models produces reductions. Among them, the decision tree received a greater impact compared to the GBC.
+
+\paragraph{No noise}
+Both models achieved a 100\% F1-score on the noise-free dataset as shown in Table ~\ref{result from same stellar perlin}. The confirmation of whether the two models identified the defined rules can only be made through further analysis of SHAP's interpretation.
+
+Fig. ~\ref{bar plots no noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig63.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig64.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for no noise on stellar dataset}
+	\label{bar plots no noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots no noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig65.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig66.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for no noise level on stellar dataset}
+	\label{bee plots no noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots no noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig67.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig68.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for no noise level on stellar dataset}
+	\label{heat plots no noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots no noise stellar}, Fig.~\ref{bee plots no noise stellar},Fig.~\ref{heat plots no noise stellar}, the decision tree's prediction strategy tends to use only the 'redshift' attribute, whereas the GBC's prediction strategy uses all the attributes, so the GBC's strategy fits the custom rule better. Also, since the average of the five filter data and 'redshift' work together to classify the classification in the custom rule, 'redshift' is the most important attribute. This is also reflected in GBC's prediction strategy.
+
+Overall, although both models get very high F1-scores, GBC's training strategy fits the rules better, so GBC is more trustworthy.
+
+\paragraph{smooth perlin noise}
+
+Fig. ~\ref{bar plots smooth noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig69.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig70.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for smooth Perlin noise on stellar dataset}
+	\label{bar plots smooth noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots smooth noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig71.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig72.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for smooth Perlin noise on stellar dataset}
+	\label{bee plots smooth noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots smooth noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig73.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig74.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for smooth Perlin noise  on stellar dataset}
+	\label{heat plots smooth noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots smooth noise stellar}, Fig.~\ref{bee plots smooth noise stellar},Fig.~\ref{heat plots smooth noise stellar}, 
+both models use the full set of attributes, with 'redshift' as the most important attribute, which is a fit to a custom rule.
+
+However, F1-score for GBC decreased less comparing with decision tree, so the GBC is more trustworthy.
+
+\paragraph{medium perlin noise}
+
+Fig. ~\ref{bar plots medium noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig75.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig76.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for medium Perlin noise on stellar dataset}
+	\label{bar plots medium noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots medium noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig77.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig78.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for medium Perlin noise on stellar dataset}
+	\label{bee plots medium noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots medium noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig79.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig80.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for medium Perlin noise  on stellar dataset}
+	\label{heat plots medium noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots medium noise stellar}, Fig.~\ref{bee plots medium noise stellar},Fig.~\ref{heat plots medium noise stellar}, with the addition of 'medium' perlin noise, the dataset becomes complex and both models are trying to fit custom rules, but both are quite disturbed by the noise.
+
+However, F1-score for GBC decreased less comparing with decision tree, so the GBC is more trustworthy.
+
+
+\paragraph{rough perlin noise}
+
+Fig. ~\ref{bar plots rough noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig81.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig82.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for rough Perlin noise on stellar dataset}
+	\label{bar plots rough noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots rough noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig83.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig84.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for rough Perlin noise on stellar dataset}
+	\label{bee plots rough noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots rough noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig85.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig86.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for rough Perlin noise  on stellar dataset}
+	\label{heat plots rough noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots rough noise stellar}, Fig.~\ref{bee plots rough noise stellar},Fig.~\ref{heat plots rough noise stellar}, with the addition of 'rough' Perlin noise, the dataset becomes very complex and both models are trying to fit custom rules, but both are quite disturbed by the noise.
+
+However, F1-score for GBC decreased less comparing with decision tree, so the GBC is more trustworthy.
+
+\subsubsection{Same Gaussian noise for all attributes}
+The decision tree and GBC were trained separately on the stellar classification dataset, which contained different levels. As a result, the following outcomes were obtained:
+
+Table~\ref{result from same stellar G} shows the performance of the two models on the stellar classification datasets with different noise level(same level on each attribute)
+
+\begin{table}[H]
+	\centering
+	\caption{F1-score from CV for same Perlin noise level on stellar dataset}
+	\label{result from same stellar G}
+	\begin{tabular}{|l|l|l|}
+		\hline
+		Noise level(std) & Result from DT  &Result from GBC\\
+		\hline
+		0.1& 0.923 +/- 0.003& 0.953 +/- 0.001 \\
+		0.2 & 0.888 +/- 0.002 & 0.928 +/- 0.001 \\
+		0.5 & 0.843 +/- 0.004 & 0.894 +/- 0.002 \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Where noise level means the standard derivation of Gaussian distribution that generate the noise.
+As can be seen in Table~\ref{result from same stellar G}, with noise level increasing, the F1-score of both two models decrease sharply. Among them, GBC got influenced by noise less.
+
+\paragraph{noise level 0.1}
+Fig. ~\ref{bar plots 0.1 noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig87.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig88.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for 0.1 Gaussian noise on stellar dataset}
+	\label{bar plots 0.1 noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots 0.1 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig89.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig90.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for 0.1 Gaussian noise on stellar dataset}
+	\label{bee plots 0.1 noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots 0.1 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig91.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig92.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for 0.1 Gaussian noise  on stellar dataset}
+	\label{heat plots 0.1 noise stellar}
+	
+\end{figure}
+
+
+As can be seen from Fig.~\ref{bar plots 0.1 noise stellar}, Fig.~\ref{bee plots 0.1 noise stellar},Fig.~\ref{heat plots 0.1 noise stellar}, when Gaussian noise with a standard deviation of 0.1 was added to the dataset, both models were affected by the noise. The F1-score of GBC was less affected. So the GBC is more trustworthy.
+
+\paragraph{noise level 0.2}
+Fig. ~\ref{bar plots 0.2 noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig93.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig94.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for 0.2 Gaussian noise on stellar dataset}
+	\label{bar plots 0.2 noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots 0.2 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig95.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig96.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for 0.2 Gaussian noise on stellar dataset}
+	\label{bee plots 0.2 noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots 0.2 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig97.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig98.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for 0.2 Gaussian noise  on stellar dataset}
+	\label{heat plots 0.2 noise stellar}
+	
+\end{figure}
+
+
+As can be seen from Fig.~\ref{bar plots 0.2 noise stellar}, Fig.~\ref{bee plots 0.2 noise stellar},Fig.~\ref{heat plots 0.2 noise stellar}, when Gaussian noise with a standard deviation of 0.2 was added to the dataset, both models were affected by the noise. The F1-score of GBC was less affected. So the GBC is more trustworthy.
+
+\paragraph{noise level 0.5}
+Fig. ~\ref{bar plots 0.5 noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig99.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig100.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for 0.5 Gaussian noise on stellar dataset}
+	\label{bar plots 0.5 noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots 0.5 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig101.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig102.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for 0.5 Gaussian noise on stellar dataset}
+	\label{bee plots 0.5 noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots 0.5 noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig103.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig104.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for for 0.5 Gaussian noise  on stellar dataset}
+	\label{heat plots 0.5 noise stellar}
+	
+\end{figure}
+
+
+As can be seen from Fig.~\ref{bar plots 0.5 noise stellar}, Fig.~\ref{bee plots 0.5 noise stellar},Fig.~\ref{heat plots 0.5 noise stellar}, when Gaussian noise with a standard deviation of 0.5 was added to the dataset, both models were severely affected by the noise. The F1-score of GBC was less affected. So the GBC is more trustworthy.
+\subsubsection{Different Perlin noise}
+The decision tree and GBC were trained separately on the stellar classification dataset, which contained different levels. As a result, the following outcomes were obtained:
+
+Table~\ref{result from different stellar} shows the performance of the two models on the stellar classification datasets with different noise level.
+\begin{table}[H]
+	\centering
+	\caption{F1-score from CV for different noise level on stellar dataset}
+	\label{result from different stellar}
+	\begin{tabular}{|l|l|l|l|}
+		\hline
+		Normal columns &Special columns & Result from DT  &Result from GBC\\
+		\hline
+		Smooth & Rough&0.884 +/- 0.004 &  0.927 +/- 0.001\\
+		Rough & Smooth& 0.917 +/- 0.003 & 0.946 +/- 0.001 \\
+		\hline
+	\end{tabular}
+\end{table}
+
+From Table~\ref{result from different stellar}, it can be seen that the F1-score of both models is perturbed by noise, but the model is less perturbed by noise when there is less noise in the 'redshift' (special attribute). Meanwhile, GBC is less affected by noise.
+
+\paragraph{Special attributes have higher noise level}
+Fig. ~\ref{bar plots special rough noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig105.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig106.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have higher noise level on stellar dataset}
+	\label{bar plots special rough noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots special rough noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig107.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig108.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have higher noise level on stellar dataset}
+	\label{bee plots special rough noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots special rough noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig109.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig110.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have higher noise level on stellar dataset}
+	\label{heat plots special rough noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots special rough noise stellar}, Fig.~\ref{bee plots special rough noise stellar},Fig.~\ref{heat plots special rough noise stellar}, with the addition of 'rough' Perlin noise, the dataset becomes very complex and both models are trying to fit custom rules, but both are quite disturbed by the noise.
+
+However, F1-score for GBC decreased less comparing with decision tree, so the GBC is more trustworthy.
+
+\paragraph{Special attributes have lower noise level}
+Fig. ~\ref{bar plots special smooth noise stellar} shows the bar plots generated by SHAP for decision tree and GBC. These bar plots show the ranking of feature importance of two models.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig111.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bar plot]{
+		\includegraphics[width=0.45\textwidth]{fig112.png}
+		
+	}
+	
+	
+	\caption{SHAP bar plot for special attributes have lower noise level on stellar dataset}
+	\label{bar plots special smooth noise stellar}
+\end{figure}
+
+
+
+Fig. ~\ref{bee plots special smooth noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig113.png}
+		
+	}
+	\hfill
+	\subfigure[GBC bee plot]{
+		\includegraphics[width=0.45\textwidth]{fig114.png}
+		
+	}
+	
+	
+	\caption{SHAP beeswarm plot for special attributes have lower noise level on stellar dataset}
+	\label{bee plots special smooth noise stellar}
+	
+\end{figure}
+Fig. ~\ref{heat plots special smooth noise stellar} shows the beeswarm plots generated by SHAP.
+\begin{figure}[H]
+	\centering
+	
+	\subfigure[Decision tree heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig115.png}
+	}
+	\hfill
+	\subfigure[GBC heatmap plot]{
+		\includegraphics[width=0.45\textwidth]{fig116.png}
+	}
+	
+	
+	\caption{SHAP heatmap plot for special attributes have lower noise level on stellar dataset}
+	\label{heat plots special smooth noise stellar}
+	
+\end{figure}
+
+As can be seen from Fig.~\ref{bar plots special smooth noise stellar}, Fig.~\ref{bee plots special smooth noise stellar},Fig.~\ref{heat plots special smooth noise stellar}, with the addition of 'rough' Perlin noise, the dataset becomes very complex and both models are trying to fit custom rules, but both are quite disturbed by the noise.
+
+However, F1-score for GBC decreased less comparing with decision tree, so the GBC is more trustworthy.
+\section{Summary}
+The performance of the two models was compared very intuitively by analysing multiple experiments on both datasets.
+The performance is divided into three areas, the F1-score derived from model training, the interpretation of the model, and the ability of the model to cope with noise.
+
+When there is no noise, both models can achieve very high F1-scores on both datasets.However, GBC's prediction strategy tends to fit custom rules better, whereas the decision tree prefers to classify using only a small number of attributes.
+
+When noise is added to the dataset, the prediction results and prediction strategies of both models are perturbed by noise. In contrast, GBC is less affected by noise, while decision trees are more sensitive to noise. In addition, when the noise is small and the dataset is simple, the model can find the custom rules hidden in the dataset. Whereas, when the noise is too large, the dataset becomes complex and challenging and the model often fails to find the custom rules correctly.
+
+Overall, in a very large number of experiments on two datasets have very different styles, the more complexly structured GBC tends to outperform the decision tree. In other word, the prediction made by GBC is more trustworthy. When assessing model performance, not only the cross-validation scores and performance metrics, but also the model's explanations should be considered.
+
+\section{Future work}
+
+In the experiments in this paper, there are still many deficiencies that can be optimised.
+
+Firstly, due to the limited computational power of the experimental environment, there is a tendency in the experiments to sample representative datasets when generating heat maps. The problem with this is that the quality of the sampling affects the quality of the interpretation to some extent. If sufficient computational power is available, heat maps of the complete dataset should be generated for a better interpretation of the model.
+
+Secondly, when processing the mushroom dataset, the data is encoded as numbers. In the experiments of this paper, the default encoding of the encoder is used. The special attribute values in the rules can be distinguished from other attribute values when encoding, then the interpretation of the beeswarm map generated by SHAP can be better analysed.
+
+Finally, due to TreeSHAP's lack of support for GBC on multiclassification problems, the rules in the experiments are all binary classification problems. The performance and interpretation of the model on multiclassification problems still need further research.
+
+\bibliographystyle{splncs04}
+
+\bibliography{ref}
+
+\end{document}
